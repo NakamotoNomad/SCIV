@@ -22,7 +22,7 @@ python sciv.py <solidity_file> <repo_path> [-v]
 ## Output
 The tool tries to automatically find the referenced smart contract in your checked out repository with known, safe contracts. It lists all automatically matched contracts as well as all contracts which couldn't be automatically matched and need to be checked manually.
 
-Sample usage:
+Sample usage and output for a safe contract:
 ``` shell
 $ python3 sciv.py ./SOW.sol ./openzeppelin-contracts/
 Number of files: 8
@@ -41,3 +41,31 @@ Matched contracts:
 Unmatched contracts:
 contracts/SOW.sol
 ```
+
+### Real-World Example: Modified Dependencies Identified
+In one real-world case, a token deployed on the Base blockchain at address `0x6CFeE80bfA1E2abE132FCf30837c31A40258598E` was found to include Solidity imports that appeared to be standard OpenZeppelin libraries — but did not match the official code.
+``` shell
+$ python3 sciv.py ./GRINCH.sol ./openzeppelin-contracts/
+Number of files: 5
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 5/5 [00:01<00:00,  4.28it/s]
+
+
+Matched contracts:
+@openzeppelin/contracts/token/ERC20/IERC20.sol (version v5.0.0)
+@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol (version v4.1.0)
+@openzeppelin/contracts/interfaces/draft-IERC6093.sol (version v5.0.0)
+
+Unmatched contracts:
+@openzeppelin/contracts/utils/Context.sol
+@openzeppelin/contracts/token/ERC20/ERC20.sol
+```
+
+In this case, both `Context.sol` and `ERC20.sol` appeared to be imported from OpenZeppelin but did not match the official source files. Upon inspection, we observed key differences - most notably:
+- An entire `permit(...)` function (similar to EIP-2612) was added to `ERC20.sol`, enabling approvals via signatures. While this functionality can be legitimate in other contexts, this contract did not import or extend OpenZeppelin’s official ERC20Permit, making the presence of such code misleading.
+- The altered contract still claims to import OpenZeppelin's `ERC20.sol`, potentially giving a false sense of security to reviewers or auditors.
+
+![ERC20 diff screenshot](./GRINCH_diff.png)
+
+This demonstrates how SCIV can help identify inconsistencies between claimed and actual implementations - highlighting areas that may need closer manual review or raise red flags during an audit.
+
+<sub>Disclaimer: This tool identifies mismatches between claimed and actual Solidity imports. It does not assess the intent, safety, or security of the code. Manual review is always recommended for a complete analysis.</sub>
